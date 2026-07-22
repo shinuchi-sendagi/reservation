@@ -183,21 +183,19 @@ function submitReservation() {
   btn.disabled = true;
   btn.textContent = '送信中...';
 
-  fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      type: 'create',
-      userId: profile.userId,
-      displayName: profile.displayName,
-      pickupName: pickupName,
-      visitDate: visitDate,
-      visitTime: visitTime,
-      productId: selectedProductId,
-      productName: product.name,
-      qty: qty
-    })
-  })
+const params = new URLSearchParams({
+    action: 'create',
+    userId: profile.userId,
+    displayName: profile.displayName,
+    pickupName: pickupName,
+    visitDate: visitDate,
+    visitTime: visitTime,
+    productId: selectedProductId,
+    productName: product.name,
+    qty: qty
+  });
+
+  fetch(ENDPOINT + '?' + params.toString())
     .then(res => res.json())
     .then(data => {
       if (data.ok) {
