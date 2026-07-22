@@ -209,6 +209,7 @@ function submitReservation() {
     qty: qty
   });
 
+  const start = Date.now();
   fetch(ENDPOINT + '?' + params.toString())
     .then(res => res.json())
     .then(data => {
@@ -216,13 +217,13 @@ function submitReservation() {
         document.getElementById('app').style.display = 'none';
         document.getElementById('success').style.display = 'block';
       } else {
-        messageEl.textContent = data.message || '予約に失敗しました';
+        messageEl.textContent = (data.message || '予約に失敗しました') + '(' + (Date.now() - start) + 'ms)';
         btn.disabled = false;
         btn.textContent = 'この内容で予約する';
       }
     })
     .catch(err => {
-      messageEl.textContent = '通信エラーが発生しました: ' + err;
+      messageEl.textContent = '通信エラーが発生しました: ' + err + '(' + (Date.now() - start) + 'ms)';
       btn.disabled = false;
       btn.textContent = 'この内容で予約する';
     });
