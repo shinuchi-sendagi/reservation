@@ -243,6 +243,12 @@ function submitReservation() {
       if (data.ok) {
         document.getElementById('app').style.display = 'none';
         document.getElementById('success').style.display = 'block';
+        const successBox = document.getElementById('success');
+        const idNote = document.createElement('p');
+        idNote.style.fontSize = '13px';
+        idNote.style.color = '#888';
+        idNote.textContent = '予約ID: ' + data.id;
+        successBox.insertBefore(idNote, successBox.querySelector('.close-btn'));
       } else {
         messageEl.textContent = (data.message || '予約に失敗しました') + '(' + (Date.now() - start) + 'ms)';
         btn.disabled = false;
