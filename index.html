@@ -25,6 +25,7 @@
   .close-btn { width: 100%; padding: 12px; margin-top: 12px; background: #fff; color: #a35c2b; border: 1px solid #a35c2b; border-radius: 10px; font-size: 14px; font-weight: 600; }
   #message { margin-top: 12px; font-size: 13px; color: #c0392b; }
   #success { display:none; text-align:center; padding: 40px 0; }
+  #cartSummary { font-size: 13px; color: #555; margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -36,7 +37,7 @@
   <input type="date" id="visitDate">
 
   <label>来店時刻</label>
- <select id="visitTime">
+  <select id="visitTime">
     <option value="">選択してください</option>
     <option value="09:00">9:00</option>
     <option value="09:30">9:30</option>
@@ -62,13 +63,13 @@
   </select>
 
   <div id="productList"></div>
+  <div id="cartSummary"></div>
 
   <label>お受け取りお名前(未入力の場合はLINEアカウント名)</label>
   <input type="text" id="pickupName" placeholder="例: 山田">
 
   <div id="message"></div>
   <button class="submit-btn" id="submitBtn" disabled>商品を選択してください</button>
-  <button class="submit-btn" id="testBtn" style="background:#888;margin-top:8px;">【テスト】軽い処理を試す</button>
 </div>
 
 <div id="success">
@@ -83,9 +84,8 @@ const LIFF_ID = '2010773108-TXLeBy5d';
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbyALJ2NKdas8b7FNLCHehEY-QfUDNwETLEOZulHERRM9mHICvOxjlQ1YPynsjGhZnoxAw/exec';
 
 let profile = null;
-let selectedProductId = null;
-let qty = 0;
 let productsCache = [];
+let cart = {}; // { productId: qty }
 
 function todayJst_() {
   const d = new Date();
@@ -126,7 +126,9 @@ function loadProducts() {
     .then(res => res.json())
     .then(data => {
       productsCache = data.products || [];
+      cart = {};
       renderProducts();
+      updateCartUI();
     })
     .catch(err => {
       document.getElementById('message').textContent = '商品取得エラー: ' + err;
@@ -152,7 +154,7 @@ function renderProducts() {
           ? '<div class="soldout-label">この日は満数です</div>'
           : '<div class="qty-row">' +
               '<button type="button" onclick="changeQty(\'' + p.id + '\', -1)">-</button>' +
-              '<span id="qty-' + p.id + '">' + (selectedProductId === p.id ? qty : 0) + '</span>' +
+              '<span id="qty-' + p.id + '">' + (cart[p.id] || 0) + '</span>' +
               '<button type="button" onclick="changeQty(\'' + p.id + '\', 1)">+</button>' +
             '</div>') +
       '</div>';
@@ -160,42 +162,39 @@ function renderProducts() {
   });
 }
 
-  function changeQty(productId, delta) {
-  if (selectedProductId !== productId) {
-    if (selectedProductId) {
-      document.getElementById('qty-' + selectedProductId).textContent = 0;
-    }
-    selectedProductId = productId;
-    qty = 0;
-  }
-  qty = Math.max(0, qty + delta);
-  document.getElementById('qty-' + productId).textContent = qty;
-
-  const btn = document.getElementById('submitBtn');
-  if (qty > 0) {
-    btn.disabled = false;
-    btn.textContent = 'この内容で予約する';
+function changeQty(productId, delta) {
+  const current = cart[productId] || 0;
+  const next = Math.max(0, current + delta);
+  if (next === 0) {
+    delete cart[productId];
   } else {
-    selectedProductId = null;
+    cart[productId] = next;
+  }
+  document.getElementById('qty-' + productId).textContent = next;
+  updateCartUI();
+}
+
+function updateCartUI() {
+  const entries = Object.keys(cart).filter(id => cart[id] > 0);
+  const btn = document.getElementById('submitBtn');
+  const summary = document.getElementById('cartSummary');
+
+  if (entries.length === 0) {
     btn.disabled = true;
     btn.textContent = '商品を選択してください';
+    summary.textContent = '';
+    return;
   }
+
+  btn.disabled = false;
+  btn.textContent = 'この内容で予約する';
+  summary.textContent = entries.map(id => {
+    const p = productsCache.find(pp => pp.id === id);
+    return (p ? p.name : id) + ' × ' + cart[id];
+  }).join(' / ');
 }
 
 document.getElementById('submitBtn').addEventListener('click', submitReservation);
-document.getElementById('testBtn').addEventListener('click', () => {
-  const messageEl = document.getElementById('message');
-  const start = Date.now();
-  messageEl.textContent = 'テスト送信中...';
-  fetch(ENDPOINT + '?action=createTest')
-    .then(res => res.json())
-    .then(data => {
-      messageEl.textContent = 'テスト成功: ' + JSON.stringify(data) + '(' + (Date.now() - start) + 'ms)';
-    })
-    .catch(err => {
-      messageEl.textContent = 'テスト失敗: ' + err + '(' + (Date.now() - start) + 'ms)';
-    });
-});
 document.getElementById('closeBtn').addEventListener('click', () => {
   if (liff.isInClient()) {
     liff.closeWindow();
@@ -213,12 +212,16 @@ function submitReservation() {
     messageEl.textContent = '来店日時を入力してください';
     return;
   }
-  if (!selectedProductId) {
+
+  const items = Object.keys(cart)
+    .filter(id => cart[id] > 0)
+    .map(id => ({ productId: id, qty: cart[id] }));
+
+  if (items.length === 0) {
     messageEl.textContent = '商品を選択してください';
     return;
   }
 
-  const product = productsCache.find(p => p.id === selectedProductId);
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.textContent = '送信中...';
@@ -230,9 +233,7 @@ function submitReservation() {
     pickupName: pickupName,
     visitDate: visitDate,
     visitTime: visitTime,
-    productId: selectedProductId,
-    productName: product.name,
-    qty: qty
+    items: JSON.stringify(items)
   });
 
   const start = Date.now();
